@@ -13,39 +13,38 @@ class Line {
     Line* prev;
     Line* next;
     string content;
-    int ch_num;
     short width;
+    int number;
 };
+
+Line* getLine(Line* head, int number) {
+  Line* now = head;
+  while(now != NULL) {
+    if(now->number == number) {
+      return now;
+    }
+    now = now->next;
+  }
+  return NULL;
+}
 
 void init_mycolors() {
   init_pair(1, COLOR_YELLOW, COLOR_BLACK);
 }
 
-/*void complement(vector<int> &line_alloc) {
-//  assert(line_alloc[0] != -1);
-  for (int i = 1; i < line_alloc.size(); i++) {
-    if (line_alloc[i] == -1) {
-      line_alloc[i] = line_alloc[i-1];
-    }
-  }
-}*/
-
-/*void init_alloc(vector<int> &line_alloc) {
-  for (int i=0; i<line_alloc.size(); i++) {
-    line_alloc[i] = -1;
-  }
-}*/
-
 Line* init_lines(int n) {
   Line* head = new Line;
   head->content = "hello";
+  head->number = 1;
   Line* prev = new Line;
   head->next = prev;
   prev->prev = head;
   prev->content = "hello--------------------------------------------------------------------------";
+  prev->number = 2;
   for(int i = 0; i < n - 2; i++) {
     Line* now = new Line;
     now->content = "hello";
+    now->number = i+3;
     prev->next = now;
     now->prev = prev;
     now->next = NULL;
@@ -53,28 +52,6 @@ Line* init_lines(int n) {
   }
   return head;
 }
-
-/*void show_lines(Line* head, WINDOW* win, vector<int> &line_alloc) {
-  init_alloc(line_alloc);
-  Line* now = head;
-  int x, y;
-  int i = 1;
-  move(0, 0);
-  while(now->next != NULL) {
-    getyx(win, y, x);
-    line_alloc[y] = i;
-    attrset(COLOR_PAIR(1));
-    mvprintw(y, 0, "%2d", i);
-    attrset(0);
-    mvaddstr(y, 3, now->content.c_str());
-    getyx(win, y, x);
-    line_alloc[y] = i;
-    move(y+1, 4);
-    now = now->next;
-    i++;
-  }
-//  complement(line_alloc);
-}*/
 
 void width_calc(Line* head, WINDOW* win) {
   int xmax, ymax;
@@ -90,16 +67,14 @@ void alloc_reflesh(Line* head, vector<int> &line_alloc) {
   Line* now = head;
   fill(line_alloc.begin(), line_alloc.end(), -1);
   int s = 0;
-  int l = 1;
   while(now != NULL && s < line_alloc.size()) {
    for(int i=0; i<now->width; i++) {
-     line_alloc[s] = l;
+     line_alloc[s] = now->number;
      s++;
      if(s >= line_alloc.size()) {
        break;
      }
    }
-   l++;
    now = now->next;
   }
 }
@@ -147,21 +122,16 @@ int main() {
   vector<int> line_alloc(ymax);
   WINDOW* subwindow = subwin(win, 3, xmax, ymax-3, 0);
   waddstr(subwindow, "This is subwindow");
-  Line* lines = init_lines(20);
-  /*try {
-  show_lines(lines, win, line_alloc);
-  } catch(const char* error) {
-    endwin();
-    cout << error << endl;
-    return EXIT_FAILURE;
-  }*/
-  width_calc(lines, win);
-  alloc_reflesh(lines, line_alloc);
-  scr_reflesh(lines, win, line_alloc);
+  Line* head = init_lines(20);
+  width_calc(head, win);
+  alloc_reflesh(head, line_alloc);
+  scr_reflesh(head, win, line_alloc);
   wmove(subwindow, 2, 0);
   for (int i=0; i<ymax; i++) {
     wprintw(subwindow, "%d ", line_alloc[i]);
   }
+  move(0, 0);
+  Line* now = head;
   while(true) {
     getyx(win, y, x);
     wmove(subwindow, 1, 0);
@@ -205,5 +175,4 @@ void movebackward(int y, int x, int ymax, int xmax) {
     move(y, x-1);
   }
 }
-
 
