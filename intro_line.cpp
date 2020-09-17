@@ -30,6 +30,7 @@ void moveforward(Cursor* cursor);
 void movebackward(Cursor* cursor);
 void moveup(Cursor* cursor, vector<int> line_alloc);
 void movedown(Cursor* cursor, vector<int> line_alloc);
+void insert_line(Cursor* cursor, vector<int> line_alloc);
 
 Line* getLine(Line* head, int number) {
   Line* now = head;
@@ -172,6 +173,7 @@ int main() {
   noecho();
   nl();
   curs_set(1);
+  keypad(win, true);
   start_color();
   init_mycolors();
   getmaxyx(win, ymax, xmax);
@@ -203,15 +205,21 @@ int main() {
       addch(' ');
       addch('\b');
     } else if(c == 10) {
-      addch('\n');
-    } else if (c == 6) {
+      insert_line(cursor, line_alloc);
+    } else if (c == 6 || c == KEY_RIGHT) {
       moveforward(cursor);
-    } else if(c == 2) {
+    } else if(c == 2 || c == KEY_LEFT) {
       movebackward(cursor);
-    } else if(c == 14) {
+    } else if(c == 14 || c == KEY_DOWN) {
       movedown(cursor, line_alloc);
-    } else if(c == 16) {
+    } else if(c == 16 || c == KEY_UP) {
       moveup(cursor, line_alloc);
+    } else if(c == 0xE0) {
+      c = getch();
+      if(c==0x48)moveup(cursor, line_alloc);
+      if(c==0x50)movedown(cursor, line_alloc);
+      if(c==0x4B)movebackward(cursor);
+      if(c==0x4D)moveforward(cursor);
     } else {
       addch(c);
     }
@@ -267,15 +275,21 @@ void movedown(Cursor* cursor, vector<int> line_alloc) {
   }
 }
 
-void insert_line(Cursor* cursor) {
+void insert_line(Cursor* cursor, vector<int> line_alloc) {
   Line* now_line = cursor->line;
   Line* new_line = new Line;
+  new_line->content = "";
+  new_line->width = 1;
   new_line->next = now_line->next;
   new_line->prev = now_line;
-  if(cursor->line->next != NULL) {
+  if(now_line->next != NULL) {
     now_line->next->prev = new_line;
   }
   now_line->next = new_line;
   renumber(now_line);
+  cursor->line_num++;
+  cursor->w_offset = 0;
+  cursor->line = new_line;
+  cursor_set(cursor, line_alloc);
 }
 

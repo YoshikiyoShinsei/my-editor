@@ -12,6 +12,7 @@ int main() {
   noecho();
   nl();
   curs_set(1);
+  keypad(win, true);
   getmaxyx(win, ymax, xmax);
   WINDOW* subwindow = subwin(win, 3, xmax, ymax-3, 0);
   waddstr(subwindow, "This is subwindow");
@@ -28,13 +29,13 @@ int main() {
       addch('\b');
     } else if(c == 10) {
       addch('\n');
-    } else if (c == 6) {
+    } else if (c == 6 || c == KEY_RIGHT) {
       moveforward(y, x, ymax, xmax);
-    } else if(c == 2) {
+    } else if(c == 2 || c == KEY_LEFT) {
       movebackward(y, x, ymax, xmax);
-    } else if(c == 14) {
+    } else if(c == 14 || c == KEY_DOWN) {
       move(y+1, x);
-    } else if(c == 16) {
+    } else if(c == 16 || c == KEY_UP) {
       move(y-1, x);
     } else {
       addch(c);
