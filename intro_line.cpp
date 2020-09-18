@@ -3,7 +3,10 @@
 #include <string>
 #include <cassert>
 #include <vector>
+#include <algorithm>
 using namespace std;
+
+class Cursor;
 
 class Line {
   public:
@@ -12,6 +15,7 @@ class Line {
     string content;
     short width;
     int number;
+    void calc_width(Cursor*);
 };
 
 class Cursor {
@@ -31,6 +35,8 @@ void movebackward(Cursor* cursor);
 void moveup(Cursor* cursor, vector<int> line_alloc);
 void movedown(Cursor* cursor, vector<int> line_alloc);
 void insert_line(Cursor* cursor, vector<int> line_alloc);
+void insert_ch(Cursor* cursor, vector<int> line_alloc, int c);
+void backspace(Cursor* cursor, vector<int> line_alloc);
 
 Line* getLine(Line* head, int number) {
   Line* now = head;
@@ -41,6 +47,10 @@ Line* getLine(Line* head, int number) {
     now = now->next;
   }
   return NULL;
+}
+
+void Line::calc_width(Cursor* cursor) {
+  this->width = this->content.size() / (cursor->xmax - 3) + 1;
 }
 
 void Cursor::set_line(Line* head) {
@@ -97,10 +107,9 @@ void width_calc(Line* head, WINDOW* win) {
   }
 }
 
-void alloc_reflesh(Line* head, vector<int> &line_alloc) {
+void alloc_reflesh(Line* head, vector<int> &line_alloc, int s) {
   Line* now = head;
   fill(line_alloc.begin(), line_alloc.end(), -1);
-  int s = 0;
   while(now != NULL && s < line_alloc.size()) {
    for(int i=0; i<now->width; i++) {
      line_alloc[s] = now->number;
@@ -142,6 +151,14 @@ void scr_reflesh(Line* head, WINDOW* win, vector<int> &line_alloc) {
   }
 }
 
+void endprocess(Line* head) {
+  Line* now = head;
+  while(now != NULL) {
+    cout << now->content << endl;
+    now = now->next;
+  }
+}
+
 Cursor* cursor_init(int ymax, int xmax, Line* head) {
   move(0, 3);
   Cursor* cursor = new Cursor;
@@ -150,7 +167,7 @@ Cursor* cursor_init(int ymax, int xmax, Line* head) {
   cursor->ymax = ymax;
   cursor->xmax = xmax;
   cursor->line_num = 1;
-  cursor->width_num = 1;
+  cursor->width_num = 0;
   cursor->w_offset = 0;
   cursor->line = head;
   return cursor;
@@ -159,6 +176,7 @@ Cursor* cursor_init(int ymax, int xmax, Line* head) {
 void cursor_set(Cursor* cursor, vector<int> line_alloc) {
   for(int i = 0; i < line_alloc.size(); i++) {
     if(line_alloc[i] == cursor->line_num) {
+      cursor->width_num = cursor->w_offset / (cursor->xmax - 3);
       cursor->cmove(i + cursor->w_offset / (cursor->xmax - 3), 3 + cursor->w_offset % (cursor->xmax - 3));
       return;
     } 
@@ -182,28 +200,26 @@ int main() {
   waddstr(subwindow, "This is subwindow");
   Line* head = init_lines(20);
   width_calc(head, win);
-  alloc_reflesh(head, line_alloc);
+  alloc_reflesh(head, line_alloc, 0);
   scr_reflesh(head, win, line_alloc);
   wmove(subwindow, 2, 0);
   Cursor* cursor = cursor_init(ymax, xmax, head);
   while(true) {
     getyx(win, y, x);
-    alloc_reflesh(head, line_alloc);
+    alloc_reflesh(head, line_alloc, 0);
     scr_reflesh(head, win, line_alloc);
     move(y, x);
 
     // reflesh subwindow
     wmove(subwindow, 1, 0);
     wclrtoeol(subwindow);
-    mvwprintw(subwindow, 1, 0, "y: %d, x: %d, ymax:%d, xmax: %d", y, x, ymax, xmax);
+    mvwprintw(subwindow, 1, 0, "y: %d, x: %d, ymax:%d, xmax: %d", cursor->y, cursor->x, ymax, xmax);
     mvwprintw(subwindow, 2, 0, "Cursor, line_num: %d, width_num: %d, w_offset: %d", cursor->line_num, cursor->width_num, cursor->w_offset);
     wrefresh(subwindow);
     
     int c = getch();
     if(c == 127) {
-      addch('\b');
-      addch(' ');
-      addch('\b');
+      backspace(cursor, line_alloc);
     } else if(c == 10) {
       insert_line(cursor, line_alloc);
     } else if (c == 6 || c == KEY_RIGHT) {
@@ -214,14 +230,12 @@ int main() {
       movedown(cursor, line_alloc);
     } else if(c == 16 || c == KEY_UP) {
       moveup(cursor, line_alloc);
-    } else if(c == 0xE0) {
-      c = getch();
-      if(c==0x48)moveup(cursor, line_alloc);
-      if(c==0x50)movedown(cursor, line_alloc);
-      if(c==0x4B)movebackward(cursor);
-      if(c==0x4D)moveforward(cursor);
+    } else if(c == 4) {
+      endwin();
+      endprocess(head);
+      return 0;
     } else {
-      addch(c);
+      insert_ch(cursor, line_alloc, c);
     }
   }
   endwin();
@@ -259,7 +273,7 @@ void moveup(Cursor* cursor, vector<int> line_alloc) {
   } else {
     cursor->line_num--;
     cursor->line = cursor->line->prev;
-    cursor->w_offset = 0;
+    cursor->w_offset = min(cursor->w_offset, (int)cursor->line->content.size());
     cursor_set(cursor, line_alloc);
   }
 }
@@ -270,7 +284,7 @@ void movedown(Cursor* cursor, vector<int> line_alloc) {
   } else {
     cursor->line_num++;
     cursor->line = cursor->line->next;
-    cursor->w_offset = 0;
+    cursor->w_offset = min(cursor->w_offset, (int)cursor->line->content.size());
     cursor_set(cursor, line_alloc);
   }
 }
@@ -278,8 +292,10 @@ void movedown(Cursor* cursor, vector<int> line_alloc) {
 void insert_line(Cursor* cursor, vector<int> line_alloc) {
   Line* now_line = cursor->line;
   Line* new_line = new Line;
-  new_line->content = "";
-  new_line->width = 1;
+  new_line->content = now_line->content.substr(cursor->w_offset);
+  now_line->content.erase(cursor->w_offset);
+  now_line->calc_width(cursor);
+  new_line->calc_width(cursor);
   new_line->next = now_line->next;
   new_line->prev = now_line;
   if(now_line->next != NULL) {
@@ -287,9 +303,55 @@ void insert_line(Cursor* cursor, vector<int> line_alloc) {
   }
   now_line->next = new_line;
   renumber(now_line);
+  alloc_reflesh(now_line, line_alloc, cursor->y - cursor->width_num);
   cursor->line_num++;
   cursor->w_offset = 0;
   cursor->line = new_line;
   cursor_set(cursor, line_alloc);
 }
 
+void delete_line(Cursor* cursor, vector<int> line_alloc) {
+  if(cursor->line->prev == NULL) {
+  } else {
+    Line* now_line = cursor->line;
+    Line* prev_line = cursor->line->prev;
+    cursor->w_offset = prev_line->content.size();
+    if(now_line->next != NULL) {
+      now_line->next->prev = prev_line;
+    }
+    prev_line->next = now_line->next;
+    prev_line->content = prev_line->content + now_line->content;
+    renumber(prev_line);
+    cursor->line_num--;
+    cursor->line = prev_line;
+    cursor->line->calc_width(cursor);
+    cursor_set(cursor, line_alloc);
+    delete now_line;
+  }
+}
+
+
+void insert_ch(Cursor* cursor, vector<int> line_alloc, int c) {
+  string s(1, (char)c); 
+  cursor->line->content.insert(cursor->w_offset, s);
+  cursor->w_offset++;
+  cursor->line->calc_width(cursor);
+  cursor_set(cursor, line_alloc);
+}
+
+void delete_ch(Cursor* cursor, vector<int> line_alloc) {
+  cursor->line->content.erase(cursor->w_offset, 1);
+  cursor->line->calc_width(cursor);
+  cursor_set(cursor, line_alloc);
+}
+
+void backspace(Cursor* cursor, vector<int> line_alloc) {
+  if(cursor->w_offset == 0) {
+    delete_line(cursor, line_alloc);
+  } else {
+    cursor->line->content.erase(cursor->w_offset - 1, 1);
+    cursor->w_offset--;
+    cursor->line->calc_width(cursor);
+    cursor_set(cursor, line_alloc);
+  }
+}
