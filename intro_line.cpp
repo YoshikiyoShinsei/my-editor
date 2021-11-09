@@ -26,17 +26,18 @@ class Cursor {
     short width_num;
     int w_offset;
     Line* line;
+    Line* head;
     void set_line(Line*);
     void cmove(int, int);
 };
 
 void moveforward(Cursor* cursor);
 void movebackward(Cursor* cursor);
-void moveup(Cursor* cursor, vector<int> line_alloc);
-void movedown(Cursor* cursor, vector<int> line_alloc);
-void insert_line(Cursor* cursor, vector<int> line_alloc);
-void insert_ch(Cursor* cursor, vector<int> line_alloc, int c);
-void backspace(Cursor* cursor, vector<int> line_alloc);
+void moveup(Cursor* cursor, vector<int> &line_alloc);
+void movedown(Cursor* cursor, vector<int> &line_alloc);
+void insert_line(Cursor* cursor, vector<int> &line_alloc);
+void insert_ch(Cursor* cursor, vector<int> &line_alloc, int c);
+void backspace(Cursor* cursor, vector<int> &line_alloc);
 
 Line* getLine(Line* head, int number) {
   Line* now = head;
@@ -170,6 +171,7 @@ Cursor* cursor_init(int ymax, int xmax, Line* head) {
   cursor->width_num = 0;
   cursor->w_offset = 0;
   cursor->line = head;
+  cursor->head = head;
   return cursor;
 }
 
@@ -206,8 +208,8 @@ int main() {
   Cursor* cursor = cursor_init(ymax, xmax, head);
   while(true) {
     getyx(win, y, x);
-    alloc_reflesh(head, line_alloc, 0);
-    scr_reflesh(head, win, line_alloc);
+    alloc_reflesh(cursor->head, line_alloc, 0);
+    scr_reflesh(cursor->head, win, line_alloc);
     move(y, x);
 
     // reflesh subwindow
@@ -218,7 +220,7 @@ int main() {
     wrefresh(subwindow);
     
     int c = getch();
-    if(c == 127) {
+    if(c == 127 || c == 8) {
       backspace(cursor, line_alloc);
     } else if(c == 10) {
       insert_line(cursor, line_alloc);
@@ -239,6 +241,28 @@ int main() {
     }
   }
   endwin();
+}
+
+void scroll_down(Cursor* cursor, vector<int> &line_alloc, int n) {
+  for(int i = 0; i < n; i++) {
+    if(cursor->head->next == NULL) {
+      break;
+    } else {
+      cursor->head = cursor->head->next;
+    }
+  }
+  alloc_reflesh(cursor->head, line_alloc, 0);
+}
+
+void scroll_up(Cursor* cursor, vector<int> &line_alloc, int n) {
+  for(int i = 0; i < n; i++) {
+    if(cursor->head->prev == NULL) {
+      break;
+    } else {
+      cursor->head = cursor->head->prev;
+    }
+  }
+  alloc_reflesh(cursor->head, line_alloc, 0);
 }
 
 void moveforward(Cursor* cursor) {
@@ -267,10 +291,12 @@ void movebackward(Cursor* cursor) {
   }
 }
 
-void moveup(Cursor* cursor, vector<int> line_alloc) {
-  if(cursor->y == 0) {
-  } else if(cursor->line->prev == NULL) {
+void moveup(Cursor* cursor, vector<int> &line_alloc) {
+  if(cursor->line->prev == NULL) {
   } else {
+    if(cursor->y == 0) {
+      scroll_up(cursor, line_alloc, 1);
+    }
     cursor->line_num--;
     cursor->line = cursor->line->prev;
     cursor->w_offset = min(cursor->w_offset, (int)cursor->line->content.size());
@@ -278,10 +304,12 @@ void moveup(Cursor* cursor, vector<int> line_alloc) {
   }
 }
 
-void movedown(Cursor* cursor, vector<int> line_alloc) {
-  if(cursor->y == cursor->ymax - 3) {
-  } else if(cursor->line->next == NULL) {
+void movedown(Cursor* cursor, vector<int> &line_alloc) {
+  if(cursor->line->next == NULL) {
   } else {
+    if(cursor->y == cursor->ymax - 3) {
+      scroll_down(cursor, line_alloc, 1);
+    }
     cursor->line_num++;
     cursor->line = cursor->line->next;
     cursor->w_offset = min(cursor->w_offset, (int)cursor->line->content.size());
@@ -289,7 +317,7 @@ void movedown(Cursor* cursor, vector<int> line_alloc) {
   }
 }
 
-void insert_line(Cursor* cursor, vector<int> line_alloc) {
+void insert_line(Cursor* cursor, vector<int> &line_alloc) {
   Line* now_line = cursor->line;
   Line* new_line = new Line;
   new_line->content = now_line->content.substr(cursor->w_offset);
@@ -304,13 +332,16 @@ void insert_line(Cursor* cursor, vector<int> line_alloc) {
   now_line->next = new_line;
   renumber(now_line);
   alloc_reflesh(now_line, line_alloc, cursor->y - cursor->width_num);
+  if(cursor->y == cursor->ymax - 3) {
+    scroll_down(cursor, line_alloc, 1);
+  }
   cursor->line_num++;
   cursor->w_offset = 0;
   cursor->line = new_line;
   cursor_set(cursor, line_alloc);
 }
 
-void delete_line(Cursor* cursor, vector<int> line_alloc) {
+void delete_line(Cursor* cursor, vector<int> &line_alloc) {
   if(cursor->line->prev == NULL) {
   } else {
     Line* now_line = cursor->line;
@@ -331,7 +362,7 @@ void delete_line(Cursor* cursor, vector<int> line_alloc) {
 }
 
 
-void insert_ch(Cursor* cursor, vector<int> line_alloc, int c) {
+void insert_ch(Cursor* cursor, vector<int> &line_alloc, int c) {
   string s(1, (char)c); 
   cursor->line->content.insert(cursor->w_offset, s);
   cursor->w_offset++;
@@ -339,15 +370,16 @@ void insert_ch(Cursor* cursor, vector<int> line_alloc, int c) {
   cursor_set(cursor, line_alloc);
 }
 
-void delete_ch(Cursor* cursor, vector<int> line_alloc) {
+void delete_ch(Cursor* cursor, vector<int> &line_alloc) {
   cursor->line->content.erase(cursor->w_offset, 1);
   cursor->line->calc_width(cursor);
   cursor_set(cursor, line_alloc);
 }
 
-void backspace(Cursor* cursor, vector<int> line_alloc) {
+void backspace(Cursor* cursor, vector<int> &line_alloc) {
   if(cursor->w_offset == 0) {
     delete_line(cursor, line_alloc);
+    scroll_up(cursor, line_alloc, 1);
   } else {
     cursor->line->content.erase(cursor->w_offset - 1, 1);
     cursor->w_offset--;
