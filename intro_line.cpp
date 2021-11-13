@@ -1,5 +1,6 @@
 #include <ncurses.h>
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <cassert>
 #include <vector>
@@ -38,6 +39,7 @@ void movedown(Cursor* cursor, vector<int> &line_alloc);
 void insert_line(Cursor* cursor, vector<int> &line_alloc);
 void insert_ch(Cursor* cursor, vector<int> &line_alloc, int c);
 void backspace(Cursor* cursor, vector<int> &line_alloc);
+void save(Line* head, string path);
 
 Line* getLine(Line* head, int number) {
   Line* now = head;
@@ -68,24 +70,31 @@ void init_mycolors() {
   init_pair(1, COLOR_YELLOW, COLOR_BLACK);
 }
 
-Line* init_lines(int n) {
-  Line* head = new Line;
-  head->content = "hello";
-  head->number = 1;
-  Line* prev = new Line;
-  head->next = prev;
-  prev->prev = head;
-  prev->content = "hello--------------------------------------------------------------------------";
-  prev->number = 2;
-  for(int i = 0; i < n - 2; i++) {
-    Line* now = new Line;
-    now->content = "hello";
-    now->number = i+3;
-    prev->next = now;
-    now->prev = prev;
-    now->next = NULL;
-    prev = now;
+Line* init_lines(string path) {
+  ifstream ifs(path);
+  if (ifs.fail()) {
+    cout << "error" << endl;
+    return NULL;
   }
+  Line* head = new Line;
+  head->number = 1;
+  string tmp_str;
+  if (getline(ifs, tmp_str)) {
+    string s(tmp_str);
+    head->content = s;
+  }
+  Line* tail = head;
+  while(getline(ifs, tmp_str)) {
+    Line* next = new Line;
+    string s(tmp_str);
+    next->content = s;
+    next->prev = tail;
+    next->next = NULL;
+    next->number = tail->number+1;
+    tail->next = next;
+    tail = next;
+  }
+  head->prev = NULL;
   return head;
 }
 
@@ -103,7 +112,14 @@ void width_calc(Line* head, WINDOW* win) {
   getmaxyx(win, ymax, xmax);
   Line* now = head;
   while(now != NULL) {
-    now->width = (now->content.size() + xmax - 4)/(xmax - 3); // 整数切り上げ
+    if (now->content.size() == 0) {
+      now->width = 1;
+    } else {
+      now->width = (now->content.size() + xmax - 4)/(xmax - 3); // 整数切り上げ
+    }
+    if (now->width == 0) {
+      cerr << "error: width_calc at " << now->number << endl;
+    }
     now = now->next;
   }
 }
@@ -186,7 +202,18 @@ void cursor_set(Cursor* cursor, vector<int> line_alloc) {
   throw;
 }
 
-int main() {
+int main(int argc, char* argv[]) {
+  if (argc != 2) {
+    cout << "error: select file" << endl;
+    return 1;
+  }
+  string filepath = argv[1];
+  ifstream ifs(filepath);
+  if (ifs.fail()) {
+    cout << ifs.fail() << endl;
+    cout << "error: no such file :" << filepath << endl;
+    return 1;
+  }
   int x,y;
   int xmax, ymax;
   WINDOW* win = initscr();
@@ -200,12 +227,13 @@ int main() {
   vector<int> line_alloc(ymax);
   WINDOW* subwindow = subwin(win, 3, xmax, ymax-3, 0);
   waddstr(subwindow, "This is subwindow");
-  Line* head = init_lines(20);
+  Line* head = init_lines(filepath);
   width_calc(head, win);
   alloc_reflesh(head, line_alloc, 0);
   scr_reflesh(head, win, line_alloc);
   wmove(subwindow, 2, 0);
   Cursor* cursor = cursor_init(ymax, xmax, head);
+  int last_pushed = 0;
   while(true) {
     getyx(win, y, x);
     alloc_reflesh(cursor->head, line_alloc, 0);
@@ -215,12 +243,12 @@ int main() {
     // reflesh subwindow
     wmove(subwindow, 1, 0);
     wclrtoeol(subwindow);
-    mvwprintw(subwindow, 1, 0, "y: %d, x: %d, ymax:%d, xmax: %d", cursor->y, cursor->x, ymax, xmax);
+    mvwprintw(subwindow, 1, 0, "y: %d, x: %d, ymax:%d, xmax: %d, pushed: %d", cursor->y, cursor->x, ymax, xmax, last_pushed);
     mvwprintw(subwindow, 2, 0, "Cursor, line_num: %d, width_num: %d, w_offset: %d", cursor->line_num, cursor->width_num, cursor->w_offset);
     wrefresh(subwindow);
-    
+
     int c = getch();
-    if(c == 127 || c == 8) {
+    if(c == 127 || c == 263) {
       backspace(cursor, line_alloc);
     } else if(c == 10) {
       insert_line(cursor, line_alloc);
@@ -236,9 +264,14 @@ int main() {
       endwin();
       endprocess(head);
       return 0;
+    } else if(c == 23) {
+      cerr << "called" << endl;
+      save(head, filepath);
     } else {
       insert_ch(cursor, line_alloc, c);
     }
+    cerr << "pushed: " << c << endl;
+    last_pushed = c;
   }
   endwin();
 }
@@ -385,5 +418,18 @@ void backspace(Cursor* cursor, vector<int> &line_alloc) {
     cursor->w_offset--;
     cursor->line->calc_width(cursor);
     cursor_set(cursor, line_alloc);
+  }
+}
+
+void save(Line* head, string path) {
+  ofstream ofs(path);
+  if (ofs.fail()) {
+    cerr << "error: cannot open savefile";
+    throw;
+  }
+  Line* now = head;
+  while (now != NULL) {
+    ofs << now->content << endl;
+    now = now->next;
   }
 }
