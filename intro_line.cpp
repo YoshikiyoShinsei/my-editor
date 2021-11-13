@@ -224,7 +224,7 @@ int main(int argc, char* argv[]) {
   start_color();
   init_mycolors();
   getmaxyx(win, ymax, xmax);
-  vector<int> line_alloc(ymax);
+  vector<int> line_alloc(ymax-2);
   WINDOW* subwindow = subwin(win, 3, xmax, ymax-3, 0);
   waddstr(subwindow, "This is subwindow");
   Line* head = init_lines(filepath);
@@ -232,7 +232,7 @@ int main(int argc, char* argv[]) {
   alloc_reflesh(head, line_alloc, 0);
   scr_reflesh(head, win, line_alloc);
   wmove(subwindow, 2, 0);
-  Cursor* cursor = cursor_init(ymax, xmax, head);
+  Cursor* cursor = cursor_init(ymax-2, xmax, head);
   int last_pushed = 0;
   while(true) {
     getyx(win, y, x);
@@ -265,22 +265,21 @@ int main(int argc, char* argv[]) {
       endprocess(head);
       return 0;
     } else if(c == 23) {
-      cerr << "called" << endl;
       save(head, filepath);
     } else {
       insert_ch(cursor, line_alloc, c);
     }
-    cerr << "pushed: " << c << endl;
     last_pushed = c;
   }
   endwin();
 }
 
 void scroll_down(Cursor* cursor, vector<int> &line_alloc, int n) {
-  for(int i = 0; i < n; i++) {
+  while(n > 0) {
     if(cursor->head->next == NULL) {
       break;
     } else {
+      n -= cursor->head->width;
       cursor->head = cursor->head->next;
     }
   }
@@ -288,10 +287,11 @@ void scroll_down(Cursor* cursor, vector<int> &line_alloc, int n) {
 }
 
 void scroll_up(Cursor* cursor, vector<int> &line_alloc, int n) {
-  for(int i = 0; i < n; i++) {
+  while(n > 0) {
     if(cursor->head->prev == NULL) {
       break;
     } else {
+      n -= cursor->head->width;
       cursor->head = cursor->head->prev;
     }
   }
@@ -340,8 +340,8 @@ void moveup(Cursor* cursor, vector<int> &line_alloc) {
 void movedown(Cursor* cursor, vector<int> &line_alloc) {
   if(cursor->line->next == NULL) {
   } else {
-    if(cursor->y == cursor->ymax - 3) {
-      scroll_down(cursor, line_alloc, 1);
+    if(line_alloc[cursor->ymax-1] == cursor->line->number) {
+      scroll_down(cursor, line_alloc, cursor->line->next->width);
     }
     cursor->line_num++;
     cursor->line = cursor->line->next;
