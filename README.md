@@ -1,4 +1,6 @@
 # my-editor
+intro_line.cppがエディター本体のコードになります。
+
 
 # TODO
 - 動作チェック
